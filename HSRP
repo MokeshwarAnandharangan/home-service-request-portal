@@ -1,0 +1,327 @@
+# Home Service Request Portal — Full Stack (React + Express + SQLite)
+
+This repository has a minimal, ready-to-run full-stack web app:
+
+- **Frontend:** React (single-file App) using fetch to talk to backend
+- **Backend:** Node.js + Express + SQLite (using `better-sqlite3` for simplicity)
+- **Features:** Create service requests, list requests, update status, delete request
+
+---
+
+## File layout (shown below as labelled code blocks)
+
+### `README` (instructions)
+
+```
+# Home Service Request Portal
+
+Two folders: `backend/` and `frontend/`.
+
+## Backend (port 4000)
+1. cd backend
+2. npm install
+3. node server.js
+
+## Frontend (port 3000)
+1. cd frontend
+2. npm install
+3. npm start
+
+The frontend expects the backend at http://localhost:4000
+```
+
+---
+
+### frontend/package.json
+
+```json
+{
+  "name": "home-service-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}
+```
+
+### frontend/public/index.html
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Home Service Request Portal</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/static/js/bundle.js"></script>
+  </body>
+</html>
+```
+
+### frontend/src/index.js
+
+```js
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App'
+import './styles.css'
+
+createRoot(document.getElementById('root')).render(<App />)
+```
+
+### frontend/src/styles.css
+
+```css
+body { font-family: Arial, Helvetica, sans-serif; background:#f6f8fa; margin:0; }
+.container { max-width:900px; margin:24px auto; padding:20px; background:white; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+.header { display:flex; justify-content:space-between; align-items:center }
+.form-row { display:flex; gap:8px; margin-bottom:8px }
+.input, textarea, select { padding:8px; border-radius:6px; border:1px solid #ddd; flex:1 }
+.button { padding:8px 12px; border-radius:6px; border:none; cursor:pointer }
+.list-item { border:1px solid #eee; padding:12px; border-radius:6px; margin-bottom:8px; display:flex; justify-content:space-between; gap:12px }
+.small { font-size:0.9rem; color:#555 }
+.status-badge { padding:4px 8px; border-radius:6px; background:#eef; }
+```
+
+### frontend/src/App.js
+
+```jsx
+import React, { useEffect, useState } from 'react'
+
+const API = 'http://localhost:4000'
+
+export default function App() {
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState({ name: '', phone: '', address: '', service: '', notes: '' })
+
+  useEffect(() => { fetchRequests() }, [])
+
+  async function fetchRequests(){
+    setLoading(true)
+    try{
+      const res = await fetch(API + '/requests')
+      const data = await res.json()
+      setRequests(data)
+    }catch(e){ console.error(e) }
+    setLoading(false)
+  }
+
+  async function createRequest(e){
+    e.preventDefault()
+    const payload = { ...form }
+    const res = await fetch(API + '/requests', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+    if(res.ok){ setForm({ name:'', phone:'', address:'', service:'', notes:'' }); fetchRequests() }
+  }
+
+  async function updateStatus(id, status){
+    await fetch(API + `/requests/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status }) })
+    fetchRequests()
+  }
+
+  async function removeRequest(id){
+    if(!window.confirm('Delete this request?')) return
+    await fetch(API + `/requests/${id}`, { method:'DELETE' })
+    fetchRequests()
+  }
+
+  return (
+    <div className="container">
+      <div className="header">
+        <h1>Home Service Requests</h1>
+        <div className="small">Simple demo • React + Express + SQLite</div>
+      </div>
+
+      <form onSubmit={createRequest} style={{marginTop:12}}>
+        <div className="form-row">
+          <input className="input" placeholder="Name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required />
+          <input className="input" placeholder="Phone" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} required />
+        </div>
+        <div className="form-row">
+          <input className="input" placeholder="Address" value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required />
+          <input className="input" placeholder="Service (e.g. Plumbing)" value={form.service} onChange={e=>setForm({...form,service:e.target.value})} required />
+        </div>
+        <div style={{marginBottom:8}}>
+          <textarea className="input" placeholder="Notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} />
+        </div>
+        <button className="button" type="submit">Create Request</button>
+      </form>
+
+      <hr style={{margin:'18px 0'}} />
+
+      <h2>Requests {loading ? '(loading...)' : `(${requests.length})`}</h2>
+      <div>
+        {requests.map(r=> (
+          <div key={r.id} className="list-item">
+            <div style={{flex:1}}>
+              <div><strong>{r.name}</strong> <span className="small">— {r.service}</span></div>
+              <div className="small">{r.address} • {r.phone}</div>
+              <div className="small">{r.notes}</div>
+              <div className="small">Created: {new Date(r.created_at).toLocaleString()}</div>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8, alignItems:'flex-end'}}>
+              <div className="status-badge small">{r.status}</div>
+              <div style={{display:'flex',gap:6}}>
+                <select onChange={e=>updateStatus(r.id, e.target.value)} defaultValue={r.status}>
+                  <option value="pending">pending</option>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                </select>
+                <button className="button" onClick={()=>removeRequest(r.id)}>Delete</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+---
+
+### backend/package.json
+
+```json
+{
+  "name": "home-service-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "better-sqlite3": "^8.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2"
+  }
+}
+```
+
+### backend/db.js
+
+```js
+// simple SQLite wrapper using better-sqlite3
+const Database = require('better-sqlite3')
+const db = new Database('requests.db')
+
+// create table if not exists
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    address TEXT,
+    service TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`).run()
+
+module.exports = db
+```
+
+### backend/server.js
+
+```js
+const express = require('express')
+const bodyParser = require('body-parser')
+const cors = require('cors')
+const db = require('./db')
+
+const app = express()
+app.use(cors())
+app.use(bodyParser.json())
+
+// list
+app.get('/requests', (req, res) => {
+  const rows = db.prepare('SELECT * FROM requests ORDER BY created_at DESC').all()
+  res.json(rows)
+})
+
+// create
+app.post('/requests', (req, res) => {
+  const { name, phone, address, service, notes } = req.body
+  if(!name || !service) return res.status(400).json({ error:'name and service required' })
+  const stmt = db.prepare('INSERT INTO requests (name, phone, address, service, notes) VALUES (?, ?, ?, ?, ?)')
+  const info = stmt.run(name, phone||'', address||'', service, notes||'')
+  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(info.lastInsertRowid)
+  res.status(201).json(row)
+})
+
+// update status or fields
+app.put('/requests/:id', (req, res) => {
+  const id = Number(req.params.id)
+  const { status, name, phone, address, service, notes } = req.body
+  // we'll only update the provided fields
+  const existing = db.prepare('SELECT * FROM requests WHERE id = ?').get(id)
+  if(!existing) return res.status(404).json({ error:'not found' })
+
+  const updated = {
+    name: name ?? existing.name,
+    phone: phone ?? existing.phone,
+    address: address ?? existing.address,
+    service: service ?? existing.service,
+    notes: notes ?? existing.notes,
+    status: status ?? existing.status
+  }
+
+  db.prepare('UPDATE requests SET name = ?, phone = ?, address = ?, service = ?, notes = ?, status = ? WHERE id = ?')
+    .run(updated.name, updated.phone, updated.address, updated.service, updated.notes, updated.status, id)
+
+  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(id)
+  res.json(row)
+})
+
+// delete
+app.delete('/requests/:id', (req, res) => {
+  const id = Number(req.params.id)
+  const info = db.prepare('DELETE FROM requests WHERE id = ?').run(id)
+  if(info.changes === 0) return res.status(404).json({ error:'not found' })
+  res.status(204).end()
+})
+
+const PORT = process.env.PORT || 4000
+app.listen(PORT, ()=>console.log('Server listening on', PORT))
+```
+
+---
+
+## Useful curl examples
+
+```
+# create
+curl -X POST http://localhost:4000/requests -H "Content-Type: application/json" -d '{"name":"Alice","phone":"123","address":"Street 1","service":"Plumbing","notes":"Leaking pipe"}'
+
+# list
+curl http://localhost:4000/requests
+
+# update
+curl -X PUT http://localhost:4000/requests/1 -H "Content-Type: application/json" -d '{"status":"in_progress"}'
+
+# delete
+curl -X DELETE http://localhost:4000/requests/1
+```
+
+---
+
+## Notes & next steps (ideas)
+- Add authentication (JWT) for service providers
+- Add file uploads/photos for requests
+- Add search / filters, pagination
+- Move DB to PostgreSQL for production
+- Deploy backend to Heroku/Vercel/Fly and frontend to Netlify/Vercel
+
+
+---
+
+End of the scaffold. Paste these files into the `frontend/` and `backend/` folders and run as described in the README.
